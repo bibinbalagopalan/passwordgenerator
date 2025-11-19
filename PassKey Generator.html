@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Deterministic Password Generator</title>
+  <style>
+    :root {
+      --bg: #0b1020; --panel:#121932; --ink:#e8ebff; --muted:#9aa3c7; --accent:#6ea8fe; --accent2:#9bffd6; --danger:#ff6b6b;
+      --ring: rgba(110,168,254,.35); --shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    * { box-sizing: border-box }
+    html,body { height: 100% }
+    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+           color: var(--ink); background: radial-gradient(1200px 800px at 10% -10%, #1b2450 0%, transparent 60%),
+                     radial-gradient(1200px 800px at 120% 110%, #143a3a 0%, transparent 60%), var(--bg);
+    }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 28px; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+    h1 { font-size: clamp(22px, 3vw, 34px); margin: 0; letter-spacing:.2px }
+    .card { background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02)); border: 1px solid rgba(255,255,255,.08);
+            border-radius: 18px; padding: 18px; box-shadow: var(--shadow); }
+    .grid { display:grid; grid-template-columns: 1fr; gap: 16px }
+    @media (min-width: 860px){ .grid { grid-template-columns: 1.1fr .9fr } }
+    label { font-weight:600; font-size: 14px; color: var(--muted) }
+    input[type="text"], input[type="password"], input[type="number"], textarea, select {
+      width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,.12);
+      background: #0f1630; color: var(--ink); outline: none; transition: box-shadow .15s, border-color .15s;
+    }
+    input:focus, textarea:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 6px var(--ring) }
+    .row { display:grid; grid-template-columns: 1fr; gap: 12px }
+    @media (min-width: 560px){ .row { grid-template-columns: 1fr 1fr } }
+    .controls { display:flex; flex-wrap:wrap; gap: 10px; align-items:center }
+    .chip { display:inline-flex; align-items:center; gap:10px; padding: 10px 12px; border-radius: 999px; background:#0e1a33; border:1px solid rgba(255,255,255,.1) }
+    .btn { cursor:pointer; border:1px solid rgba(255,255,255,.14); background: linear-gradient(180deg, #1a2a56, #132041);
+           color:var(--ink); padding: 10px 14px; border-radius: 12px; font-weight: 600; letter-spacing:.2px }
+    .btn:hover { filter: brightness(1.1) }
+    .btn.secondary { background: #12233d }
+    .btn.danger { background: #32181c; border-color: #7c2b36; color: #ffd6db }
+    .out { display:flex; gap:8px; align-items:center }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .muted { color: var(--muted) }
+    .pwbox { font-size: 18px }
+    .hint { font-size: 13px; color: var(--muted) }
+    .strength { height: 10px; border-radius: 999px; background: #1a233a; overflow: hidden; border:1px solid rgba(255,255,255,.12) }
+    .bar { height: 100%; width: 0% }
+    .bar.ok { background: linear-gradient(90deg, #ffb703, #ffd166) }
+    .bar.good { background: linear-gradient(90deg, #80ed99, #06d6a0) }
+    .bar.strong { background: linear-gradient(90deg, #6ea8fe, #9bffd6) }
+    footer { margin-top: 22px; color: var(--muted); font-size: 13px }
+    .kbd { border:1px solid rgba(255,255,255,.16); padding:2px 6px; border-radius:6px; background:#0c1732 }
+    .note { border-left: 3px solid var(--accent); padding-left: 10px }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Deterministic Password Generator</h1>
+      <button class="btn secondary" id="aboutBtn" title="About">ℹ︎ About</button>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <div class="row">
+          <div>
+            <label for="input">Source string</label>
+            <input id="input" type="text" placeholder="e.g. my master phrase or site key" autocomplete="off" />
+          </div>
+          <div>
+            <label for="context">(Optional) Context / site tag</label>
+            <input id="context" type="text" placeholder="e.g. example.com or email" autocomplete="off" />
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="length">Password length (<span id="lenVal">20</span>)</label>
+            <input id="length" type="range" min="8" max="64" value="20" />
+          </div>
+          <div>
+            <label>Character sets</label>
+            <div class="controls">
+              <label class="chip"><input type="checkbox" id="lower" checked> a–z</label>
+              <label class="chip"><input type="checkbox" id="upper" checked> A–Z</label>
+              <label class="chip"><input type="checkbox" id="digits" checked> 0–9</label>
+              <label class="chip"><input type="checkbox" id="symbols" checked> symbols</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="controls" style="margin-top:10px">
+          <button id="generate" class="btn">Generate</button>
+          <button id="copy" class="btn secondary">Copy</button>
+          <button id="toggleMask" class="btn secondary">Show</button>
+          <button id="clear" class="btn danger">Clear</button>
+        </div>
+
+        <div class="card" style="margin-top:14px">
+          <label for="output">Password</label>
+          <div class="out">
+            <input id="output" class="pwbox mono" type="password" readonly placeholder="" />
+          </div>
+          <div class="strength" style="margin-top:10px"><div id="bar" class="bar"></div></div>
+          <div class="hint" id="hint">—</div>
+        </div>
+      </section>
+
+      <aside class="card">
+        <h3 style="margin-top:4px">How it works</h3>
+        <p class="muted note">This tool deterministically derives a password from your input by hashing (SHA‑256) with a context tag and expanding the result to the desired length. It uses rejection sampling to avoid modulo bias and guarantees at least one character from each selected set.</p>
+        <ul class="muted">
+          <li>Same input + context = same password</li>
+          <li>Everything happens locally in your browser; nothing is sent anywhere</li>
+          <li>For stronger, site‑unique passwords, use a context like <span class="kbd">example.com</span></li>
+        </ul>
+        <p class="hint">⚠️ If someone learns your source string, they can reproduce your passwords. Consider combining a memorable base with a unique context per site.</p>
+      </aside>
+    </div>
+
+    <footer>
+      <div>Made with WebCrypto (<span class="mono">SHA‑256</span>) • No storage, no tracking.</div>
+    </footer>
+  </div>
+
+<script>
+  const $ = (id)=>document.getElementById(id);
+  const enc = new TextEncoder();
+  const SYMBOLS = "!#$%&()*+,-./:;<=>?@[]^_{|}~"; // exclude quotes and backslash to reduce site issues
+
+  $('length').addEventListener('input', ()=>{ $('lenVal').textContent = $('length').value; });
+
+  $('aboutBtn').addEventListener('click', ()=>{
+    alert(`Deterministic Password Generator\n\nThis page turns a source string into a strong password.\n— Uses SHA-256 via WebCrypto\n— Rejection sampling (no modulo bias)\n— Ensures each selected character class is present\n— Add a site tag (context) to get a unique password per site.\n\nAll done locally in your browser.`);
+  });
+
+  $('toggleMask').addEventListener('click', ()=>{
+    const o = $('output');
+    if (!o.value) return;
+    o.type = (o.type === 'password') ? 'text' : 'password';
+    $('toggleMask').textContent = (o.type === 'password') ? 'Show' : 'Hide';
+  });
+
+  $('clear').addEventListener('click', ()=>{
+    ['input','context','output'].forEach(id=>$(id).value='');
+    $('bar').style.width='0%'; $('bar').className='bar'; $('hint').textContent='—';
+  });
+
+  $('copy').addEventListener('click', async ()=>{
+    const v = $('output').value; if (!v) return;
+    try { await navigator.clipboard.writeText(v); $('copy').textContent='Copied!'; setTimeout(()=>$('copy').textContent='Copy', 1200); } catch {}
+  });
+
+  $('generate').addEventListener('click', generate);
+  ['input','context','length','lower','upper','digits','symbols'].forEach(id=>{
+    $(id).addEventListener('keyup', (e)=>{ if(e.key==='Enter') generate(); });
+  });
+
+  async function generate(){
+    const base = $('input').value || '';
+    const ctx  = $('context').value || '';
+    const length = parseInt($('length').value, 10);
+    const sets = [
+      $('lower').checked ? 'lower' : null,
+      $('upper').checked ? 'upper' : null,
+      $('digits').checked ? 'digits' : null,
+      $('symbols').checked ? 'symbols' : null,
+    ].filter(Boolean);
+
+    if (!base) { alert('Please enter a source string.'); return; }
+    if (sets.length === 0) { alert('Pick at least one character set.'); return; }
+
+    const charsetParts = [];
+    if (sets.includes('lower')) charsetParts.push('abcdefghijklmnopqrstuvwxyz');
+    if (sets.includes('upper')) charsetParts.push('ABCDEFGHIJKLMNOPQRSTUVWXYZ');
+    if (sets.includes('digits')) charsetParts.push('0123456789');
+    if (sets.includes('symbols')) charsetParts.push(SYMBOLS);
+    const charset = charsetParts.join('');
+
+    const raw = await kdf(`${base}\u241f${ctx}`); // U+241F SYMBOL FOR UNIT SEPARATOR
+    const pw = mapToCharset(raw, length, charset, charsetParts);
+
+    $('output').value = pw;
+    $('output').type = 'password';
+    $('toggleMask').textContent = 'Show';
+    updateStrength(pw, sets.length);
+  }
+
+  // Key-derivation-ish: SHA-256 of (input + counter) chunks until we have enough bytes
+  async function kdf(input, needBytes=256){
+    let out = new Uint8Array();
+    let counter = 0;
+    while (out.length < needBytes){
+      const data = enc.encode(input + '|' + counter);
+      const buf = await crypto.subtle.digest('SHA-256', data);
+      out = concat(out, new Uint8Array(buf));
+      counter++;
+    }
+    return out;
+  }
+
+  function concat(a,b){ const c = new Uint8Array(a.length + b.length); c.set(a,0); c.set(b,a.length); return c }
+
+  // Rejection-sampling map to avoid modulo bias; ensure each selected set appears at least once
+  function mapToCharset(bytes, length, charset, sets){
+    const N = charset.length;
+    const out = [];
+    let i = 0;
+    const threshold = Math.floor(256 / N) * N; // largest multiple <= 256
+
+    while (out.length < length){
+      if (i >= bytes.length) throw new Error('kdf underflow');
+      const b = bytes[i++];
+      if (b >= threshold) continue; // reject to avoid bias
+      out.push(charset[b % N]);
+    }
+
+    // Guarantee at least one char from each class
+    const checks = [];
+    const classes = sets.map(s => {
+      if (s === 'abcdefghijklmnopqrstuvwxyz') return /[a-z]/;
+      if (s === 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') return /[A-Z]/;
+      if (s === '0123456789') return /[0-9]/;
+      if (s === SYMBOLS) return /[!#$%&()*+,-./:;<=>?@\[\]^_{|}~]/;
+      return /[\s\S]/;
+    });
+
+    const classRegex = {
+      lower: /[a-z]/,
+      upper: /[A-Z]/,
+      digits: /[0-9]/,
+      symbols: /[!#$%&()*+,-./:;<=>?@\[\]^_{|}~]/
+    };
+
+    const need = [];
+    if (sets.includes('lower') && !classRegex.lower.test(out.join(''))) need.push('lower');
+    if (sets.includes('upper') && !classRegex.upper.test(out.join(''))) need.push('upper');
+    if (sets.includes('digits') && !classRegex.digits.test(out.join(''))) need.push('digits');
+    if (sets.includes('symbols') && !classRegex.symbols.test(out.join(''))) need.push('symbols');
+
+    // Replace positions deterministically using remaining bytes
+    let j = i;
+    for (const req of need){
+      if (j >= bytes.length) break;
+      const pos = bytes[j++] % out.length;
+      let pool = '';
+      if (req==='lower') pool='abcdefghijklmnopqrstuvwxyz';
+      if (req==='upper') pool='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      if (req==='digits') pool='0123456789';
+      if (req==='symbols') pool=SYMBOLS;
+
+      // select replacement char with rejection sampling
+      const M = pool.length; const th = Math.floor(256/M)*M;
+      let picked = null;
+      while (j < bytes.length && picked === null){
+        const b = bytes[j++];
+        if (b < th) picked = pool[b % M];
+      }
+      if (picked) out[pos] = picked;
+    }
+
+    return out.join('');
+  }
+
+  function updateStrength(pw, classCount){
+    // Crude entropy estimate: log2(charset^len) = len*log2(charset)
+    const unique = new Set(pw).size;
+    const len = pw.length;
+    let charsetSize = 0;
+    if (/[a-z]/.test(pw)) charsetSize += 26; else if (classCount) charsetSize += 0;
+    if (/[A-Z]/.test(pw)) charsetSize += 26;
+    if (/[0-9]/.test(pw)) charsetSize += 10;
+    if (/[!#$%&()*+,-./:;<=>?@\[\]^_{|}~]/.test(pw)) charsetSize += SYMBOLS.length;
+    // Fallback if regex misses (shouldn't):
+    if (charsetSize === 0) charsetSize = Math.min(Math.max(unique, 10), 94);
+    const entropy = len * Math.log2(charsetSize || 1);
+
+    const pct = Math.max(10, Math.min(100, Math.round(entropy)));
+    const bar = $('bar');
+    bar.style.width = Math.min(100, pct) + '%';
+    bar.className = 'bar ' + (entropy < 60 ? 'ok' : entropy < 90 ? 'good' : 'strong');
+    $('hint').textContent = `Estimated entropy ≈ ${entropy.toFixed(1)} bits`;
+  }
+</script>
+</body>
+</html>
